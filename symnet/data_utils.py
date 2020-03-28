@@ -100,17 +100,22 @@ def read_data(path: str, label_column: str = None, header: int = 0, balance: boo
     # Normalizing y by dividing by a constant
     # df.loc[:,label_column]=df.loc[:,label_column]/float(1e5)
 
-    train_df, test_df = train_test_split(df, train_size=train_size,random_state=42,shuffle=True)
+    train_df, test_df = train_test_split(df, train_size=train_size,shuffle=True)
 
     if balance:
         print("Balancing dataset")
         train_df = rebalance(train_df, label_column)
 
+    # label_column=label_column.split(",")
+    
     y = train_df[label_column]
     y_test = test_df[label_column]
     train_df.drop(label_column, axis=1, inplace=True)
     test_df.drop(label_column, axis=1, inplace=True)
 
+
+    print(train_df.columns,test_df.columns)
+    # print(y.columns,y_test.columns)
     if categorize:
         y_train = to_categorical(np.array(y))
         y_test = to_categorical(np.array(y_test))

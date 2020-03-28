@@ -4,8 +4,19 @@ from keras import backend as K
 import numpy as np
 import os
 import matplotlib.pyplot as plt
+import time
+import keras
 
-# path="./tests/EnergyEfficiency/suraj/sgd/trial_1"
+base_path="./tej_tests/CaliforniaHousing/method_26/trial_1/"
+
+class TimeHistory(keras.callbacks.Callback):
+    def on_train_begin(self,logs={}):
+        self.time_history=[]
+    def on_epoch_begin(self,epoch,logs={}):
+        self.epoch_start_time=time.time()
+    def on_epoch_end(self,epoch,logs={}):
+        self.time_history.append(time.time() - self.epoch_start_time)
+
 
 class AbstractModel:
     """
@@ -14,7 +25,7 @@ class AbstractModel:
 
     def __init__(self, path: str, n_classes: int = 2, activation='relu', task: str = 'classification',
                  bs: int = 64, train_size: float = 0.7, optimizer: str = 'sgd', epochs: int = 100,
-                 balance: bool = True):
+                 balance: bool = True,flag_type="constant"):
         """
         Initializes a Model instance.
         :param path: Path to the CSV file
@@ -33,7 +44,7 @@ class AbstractModel:
         if n_classes < 2:
             raise ValueError('n_classes must be at least 2.')
         if optimizer == 'sgd':
-            self.optimizer = SGD(clipnorm=2.0)
+            self.optimizer = SGD()
         else:
             raise NotImplementedError('Only SGD optimizer is implemented!')
         if bs < 1 or not isinstance(bs, int):
@@ -50,6 +61,8 @@ class AbstractModel:
         self.n_classes = n_classes
         self.epochs = epochs
         self.balance = balance
+        self.lr_time=[]
+        self.flag_type=""
 
         self.lr_history = []
         self.model = None
@@ -115,14 +128,16 @@ class AbstractModel:
             # Again a hack: these aren't set for image classification.
             if finish_fit:
                 raise ValueError('Data is None')
-
+        
         self.model = self._get_model()
 
         lr_scheduler = LearningRateScheduler(self._lr_schedule)
-        # csv_logger=CSVLogger(filename='./tej_tests/CaliforniaHousing/method_31/random_state_42/training_0.1.log',append='True')
+        if(self.flag_type=="adaptive"):
+            csv_logger=CSVLogger(filename=base_path+'training_adaptive.log',append='True')
+        else:
+            csv_logger=CSVLogger(filename=base_path+'training_constant.log',append='True')
 
-        # Prepare callbacks for model saving and for learning rate adjustme
-        # nt.
+        # Prepare callbacks for model saving and for learning rate adjustment.
         save_dir = os.path.join(os.getcwd(), 'saved_models')
         model_name = 'model.{epoch:03d}.h5'
 
@@ -135,13 +150,27 @@ class AbstractModel:
                                      monitor='val_acc',
                                      verbose=1,
                                      save_best_only=True)
-        print("self.optimizer",self.optimizer)
+        print("self.optimizer",self.optimizer,self.loss)
         self.model.compile(self.optimizer, loss=self.loss, metrics=self.metrics)
 
 
         if finish_fit:
+            time_callback = TimeHistory()
             self.model.fit(self.x_train, self.y_train, validation_data=(self.x_test, self.y_test), epochs=self.epochs,
-                           batch_size=self.bs, shuffle=True, callbacks=[lr_scheduler, checkpoint])
+                           batch_size=self.bs, shuffle=True, callbacks=[lr_scheduler, checkpoint,csv_logger,time_callback])
+            print(self.lr_time)
+            print(time_callback.time_history)
+            string_to_dump=""
+            # string_to_dump="Epoch,Time taken"+"\n"
+            for i in range(len(time_callback.time_history)):
+                string_to_dump += str(i)+","+str(time_callback.time_history[i] + self.lr_time[i])+"\n"
+            
+            if(self.flag_type=="adaptive"): 
+                with open(base_path+"epoch_times_adaptive.log","a") as fp:
+                    fp.write(string_to_dump)
+            else:
+                with open(base_path+"epoch_times.log","a") as fp:
+                    fp.write(string_to_dump)
 
     def predict(self, x: np.ndarray):
         """
